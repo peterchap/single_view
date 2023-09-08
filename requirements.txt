@@ -4,7 +4,7 @@ aiohttp
 asyncio
 asyncwhois
 certifi
-io
+
 socket
 ssl
 sys
