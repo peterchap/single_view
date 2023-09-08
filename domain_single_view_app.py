@@ -486,7 +486,7 @@ with open("style.css") as f:
     st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
 
 st.title("Domain Single View")
-input = st.text_input("Enter Domain")
+input = st.text_input("Enter Domain", "datazag.com")
 url = "https://www." + input + "/"
 st.write("Fetching Data for: ", url)
 with st.spinner("Wait for it..."):
