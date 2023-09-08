@@ -7,4 +7,5 @@ certifi
 beautifulsoup4
 googletrans-mxloli-ver
 pillow
-selenium
+seleniumbase
+webdriver-manager

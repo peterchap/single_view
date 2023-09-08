@@ -14,6 +14,9 @@ from datetime import datetime
 from googletrans import Translator
 from PIL import Image
 from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
+from webdriver_manager.chrome import ChromeDriverManager
 
 
 headers = {
@@ -400,11 +403,16 @@ async def language_check(text):
 
 
 def capture_screenshot(url, thumbnail_size=(300, 200)):
-    # Set up the driver and open the URL
+    """# Set up the driver and open the URL
     options = webdriver.ChromeOptions()
     options.headless = True
     driver = webdriver.Chrome(options=options)
+    """
+    options = Options()
+    options.add_argument("--disable-gpu")
+    options.add_argument("--headless")
 
+    driver = get_driver()
     driver.get(url)
 
     # Take a screenshot
@@ -466,6 +474,13 @@ async def main(domain):
             )
             result.update(sitedict)
             return result
+
+
+@st_cache_resource
+def get_driver():
+    return webdriver.Chrome(
+        service=Service(ChromeDriverManager().install()), options=options
+    )
 
 
 @st.cache_data()
