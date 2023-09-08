@@ -476,7 +476,7 @@ async def main(domain):
             return result
 
 
-@st_cache_resource
+@st.cache_resource
 def get_driver():
     return webdriver.Chrome(
         service=Service(ChromeDriverManager().install()), options=options
