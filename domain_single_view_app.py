@@ -410,6 +410,7 @@ async def language_check(text):
 
 
 options = Options()
+options.add(webdriver.ChromeOptions())
 options.add_argument("--disable-gpu")
 options.add_argument("--headless")
 
