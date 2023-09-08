@@ -5,6 +5,6 @@ asyncio
 asyncwhois
 certifi
 beautifulsoup4
-googletrans-py
+googletrans-mxloli-ver
 pillow
 selenium
