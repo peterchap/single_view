@@ -4,13 +4,7 @@ aiohttp
 asyncio
 asyncwhois
 certifi
-
-socket
-ssl
-sys
-time
 beautifulsoup4
-datetime
 googletrans-py
 pillow
 selenium
