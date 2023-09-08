@@ -24,6 +24,13 @@ headers = {
 }
 
 
+@st.cache_resource
+def get_driver():
+    return webdriver.Chrome(
+        service=Service(ChromeDriverManager().install()), options=options
+    )
+
+
 async def get_any(session, domain):
     url = f"https://dns.google.com/resolve?name={domain}&type=ANY"
     async with session.get(url) as resp:
@@ -402,17 +409,19 @@ async def language_check(text):
     return category, language, translated
 
 
+options = Options()
+options.add_argument("--disable-gpu")
+options.add_argument("--headless")
+
+driver = get_driver()
+
+
 def capture_screenshot(url, thumbnail_size=(300, 200)):
     """# Set up the driver and open the URL
     options = webdriver.ChromeOptions()
     options.headless = True
     driver = webdriver.Chrome(options=options)
     """
-    options = Options()
-    options.add_argument("--disable-gpu")
-    options.add_argument("--headless")
-
-    driver = get_driver()
     driver.get(url)
 
     # Take a screenshot
@@ -474,13 +483,6 @@ async def main(domain):
             )
             result.update(sitedict)
             return result
-
-
-@st.cache_resource
-def get_driver():
-    return webdriver.Chrome(
-        service=Service(ChromeDriverManager().install()), options=options
-    )
 
 
 @st.cache_data()
