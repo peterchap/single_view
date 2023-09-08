@@ -1,0 +1,16 @@
+streamlit
+pandas
+aiohttp
+asyncio
+asyncwhois
+certifi
+io
+socket
+ssl
+sys
+time
+beautifulsoup4
+datetime
+googletrans-py
+pillow
+selenium
