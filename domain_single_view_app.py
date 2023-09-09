@@ -26,7 +26,7 @@ headers = {
 
 @st.cache_resource
 def get_driver():
-    return webdriver.Chrome
+    return webdriver.Chrome()
 
 
 async def get_any(session, domain):
