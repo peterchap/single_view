@@ -407,9 +407,9 @@ async def language_check(text):
     return category, language, translated
 
 
-options = Options()
-options.add_argument("--disable-gpu")
-options.add_argument("--headless")
+# options = Options()
+# options.add_argument("--disable-gpu")
+# options.add_argument("--headless")
 
 
 def capture_screenshot(url, thumbnail_size=(300, 200)):
@@ -419,7 +419,6 @@ def capture_screenshot(url, thumbnail_size=(300, 200)):
     driver = webdriver.Chrome(options=options)
     """
     driver = get_driver()
-
     driver.get(url)
 
     # Take a screenshot
