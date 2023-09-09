@@ -495,7 +495,6 @@ def www_image(url):
     return image
 
 
-st.set_page_config(layout="wide")
 # Replace with your target URL
 with open("style.css") as f:
     st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
