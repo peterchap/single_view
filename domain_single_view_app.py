@@ -409,13 +409,13 @@ async def language_check(text):
 
 # options = Options()
 # options.add_argument("--disable-gpu")
-# options.add_argument("--headless")
+#
 
 
 def capture_screenshot(url, thumbnail_size=(300, 200)):
     """# Set up the driver and open the URL
     options = webdriver.ChromeOptions()
-    options.headless = True
+    options.add_argument("--headless")
     driver = webdriver.Chrome(options=options)
     """
     driver = get_driver()
