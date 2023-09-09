@@ -411,8 +411,6 @@ options = Options()
 options.add_argument("--disable-gpu")
 options.add_argument("--headless")
 
-driver = get_driver()
-
 
 def capture_screenshot(url, thumbnail_size=(300, 200)):
     """# Set up the driver and open the URL
@@ -420,6 +418,7 @@ def capture_screenshot(url, thumbnail_size=(300, 200)):
     options.headless = True
     driver = webdriver.Chrome(options=options)
     """
+    driver = get_driver()
     driver.get(url)
 
     # Take a screenshot
