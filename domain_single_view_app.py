@@ -415,9 +415,11 @@ async def language_check(text):
 def capture_screenshot(url, thumbnail_size=(300, 200)):
     # Set up the driver and open the URL
     options = webdriver.ChromeOptions()
-    options.add_argument("--headless")
-    options.add_argument("--no-sandbox")
-    options.add_argument("--disable-dev-shm-usage")
+    options.add_argument("no-sandbox")
+    options.add_argument("headless")
+    options.addArguments("no-sandbox")
+    options.addArguments("crash-dumps-dir=/tmp")
+    options.add_argument("disable-dev-shm-usage")
     driver = webdriver.Chrome(options=options)
 
     driver = get_driver()
