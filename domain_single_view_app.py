@@ -409,10 +409,9 @@ async def language_check(text):
     return category, language, translated
 
 
-options = Options()
-options.add(webdriver.ChromeOptions())
-options.add_argument("--disable-gpu")
-options.add_argument("--headless")
+service = Service()
+options = webdriver.ChromeOptions()
+driver = webdriver.Chrome(service=service, options=options)
 
 driver = get_driver()
 
