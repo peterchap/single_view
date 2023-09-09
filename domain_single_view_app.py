@@ -417,7 +417,7 @@ def capture_screenshot(url, thumbnail_size=(300, 200)):
     options = webdriver.ChromeOptions()
     options.add_argument("--headless")
     options.add_argument("--no-sandbox")
-    options.ad_argument("--disable-dev-shm-usage")
+    options.add_argument("--disable-dev-shm-usage")
     driver = webdriver.Chrome(options=options)
 
     driver = get_driver()
