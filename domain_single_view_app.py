@@ -24,7 +24,7 @@ headers = {
 }
 
 
-@st.cache_resource
+# @st.cache_resource
 def get_driver():
     return webdriver.Chrome
 
