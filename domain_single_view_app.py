@@ -422,7 +422,7 @@ def capture_screenshot(url, thumbnail_size=(300, 200)):
         command_executor="http://localhost:4444/wd/hub", options=options
     )
 
-    driver = get_driver()
+    # driver = get_driver()
     driver.get(url)
 
     # Take a screenshot
