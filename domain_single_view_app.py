@@ -22,6 +22,8 @@ headers = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36",
 }
 
+st.set_page_config(layout="wide")
+
 
 @st.cache_resource
 def get_driver():
@@ -498,6 +500,13 @@ def www_image(url):
     return image
 
 
+def style_df(df):
+    df = df.style.hide(axis="columns", names=False).set_properties(
+        **{"text-align": "left"}
+    )
+    return df
+
+
 # Replace with your target URL
 with open("style.css") as f:
     st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
@@ -512,10 +521,15 @@ st.success("Done!")
 data = load_data(input)
 df = pd.DataFrame.from_dict(data, orient="index")
 df_domain = df[df.index.isin(["Domain", "Create Date", "NS", "A", "CNAME"])]
+df_email = df[df.index.isin(["MX", "SPF", "Mail"])]
+df_website = df[df.index.isin(["WWW", "PTR", "Parked"])]
+df_description = df[df.index.isin(["Title", "Description", "Category", "Language"])]
+df_domain_style = style_df(df_domain)
+df_email_style = style_df(df_email)
+df_website_style = style_df(df_website)
+df_description_style = style_df(df_description)
 
-df_domain_style = df_domain.style.hide(axis="columns").set_properties(
-    **{"text-align": "left"}
-)
+
 image = www_image(url)
 col1, col2 = st.columns(2)
 with col1:
@@ -523,9 +537,7 @@ with col1:
     st.write(df_domain_style.to_html(), unsafe_allow_html=True)
 with col2:
     st.subheader("Email Info")
-    st.write("MX: ", data["MX"])
-    st.write("SPF: ", data["SPF"])
-    st.write("Mail: ", data["Mail"])
+    st.write(df_email_style.to_html(), unsafe_allow_html=True)
 with st.container():
     st.subheader("Website Info")
     (
@@ -533,14 +545,11 @@ with st.container():
         col2,
     ) = st.columns(2)
     with col1:
-        st.write("WWW: ", data["WWW"])
-        st.write("PTR: ", data["PTR"])
-        st.write("Parked: ", data["Parked"])
+        st.write(df_website_style.to_html(), unsafe_allow_html=True)
     with col2:
         st.image(image, caption="Website Screenshot")
         st.markdown(f'<a href="{url}">Website Link</a>', unsafe_allow_html=True)
-    st.write("Title: ", data["Title"])
-    st.write("Description: ", data["Description"])
-    st.write("Category: ", data["Category"])
-    st.write("Language: ", data["Language"])
-    st.write("Translation: ", data["Translation"])
+    st.write(df_description_style.to_html(), unsafe_allow_html=True)
+    if data["Language"] != "en":
+        st.write("Translated Text")
+        st.write(df["Translation"])
