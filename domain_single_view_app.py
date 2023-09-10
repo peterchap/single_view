@@ -416,12 +416,11 @@ async def language_check(text):
 def capture_screenshot(url, thumbnail_size=(300, 200)):
     # Set up the driver and open the URL
     options = webdriver.ChromeOptions()
-    options.add_argument("no-sandbox")
-    options.add_argument("headless")
-    options.add_argument("no-sandbox")
-    options.add_argument("crash-dumps-dir=/tmp")
-    options.add_argument("disable-dev-shm-usage")
-    driver = webdriver.Chrome(options=options)
+    options.add_argument("--ignore-ssl-errors=yes")
+    options.add_argument("--ignore-certificate-errors")
+    driver = webdriver.Remote(
+        command_executor="http://localhost:4444/wd/hub", options=options
+    )
 
     driver = get_driver()
     driver.get(url)
