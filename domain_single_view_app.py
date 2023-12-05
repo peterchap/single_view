@@ -2,25 +2,34 @@ import streamlit as st
 import pandas as pd
 import aiohttp
 import asyncio
+import dns.asyncresolver
 import asyncwhois
 import certifi
 import io
+import re
 import socket
 import ssl
 import sys
 import time
+import tldextract
+
+import datetime
 from bs4 import BeautifulSoup
-from datetime import datetime
+from datetime import datetime, date
 from googletrans import Translator
 from PIL import Image
 from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.chrome.service import Service as ChromeService
-
+from selenium.webdriver.common.by import By
 
 headers = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36",
 }
+
+resolver = dns.asyncresolver.Resolver()
+resolver.lifetime = 2.0
+resolver.timeout = 2.0
+
+extract = tldextract.TLDExtract(include_psl_private_domains=True)
 
 st.set_page_config(layout="wide")
 
@@ -30,228 +39,211 @@ def get_driver():
     return webdriver.Chrome()
 
 
-async def get_any(session, domain):
-    url = f"https://dns.google.com/resolve?name={domain}&type=ANY"
-    async with session.get(url) as resp:
-        response = await resp.json(encoding="latin-1")
-
-        if "Answer" in response:
-            df = pd.DataFrame.from_dict(response["Answer"]).replace(",", "", regex=True)
-            df = df[~df["data"].str.contains("invalid")]
-            if 13 in df["type"].values:
-                y = await get_domain_type13(session, domain)
-            else:
-                try:
-                    df = df.loc[df["type"].isin([1, 2, 5, 15, 16])]
-                    try:
-                        a = df["data"].loc[df["type"] == 1].values[0]
-                    except:
-                        a = "No A"
-                    try:
-                        ns = (
-                            df["data"]
-                            .loc[df["type"] == 2]
-                            .values[0]
-                            .rstrip(".")
-                            .lower()
-                        )
-                    except:
-                        ns = "No NS"
-                    try:
-                        cname = (
-                            df["data"]
-                            .loc[df["type"] == 5]
-                            .values[0]
-                            .rstrip(".")
-                            .lower()
-                        )
-                    except:
-                        cname = "No CNAME"
-                    try:
-                        mx = (
-                            df["data"]
-                            .loc[df["type"] == 15]
-                            .values[0]
-                            .rstrip(".")
-                            .lower()
-                        )
-                        mx = mx.split(" ")[1]
-                    except:
-                        mx = "No MX"
-                    try:
-                        spf = (
-                            df["data"]
-                            .loc[
-                                (df["type"] == 16)
-                                & df["data"].str.contains("spf", regex=False)
-                            ]
-                            .values[0]
-                        )
-                        if len(spf) > 100:
-                            spf = spf[0:99]
-                    except:
-                        spf = "No SPF"
-                    try:
-                        www, ptr = await get_www(session, domain)
-                    except:
-                        www = "No WWW"
-                        ptr = "No PTR"
-                    try:
-                        mail = await get_mail(session, domain)
-                    except:
-                        mail = "No Mail"
-                    y = f"{domain},{'Response OK'},{a},{ns},{cname},{mx},{spf},{www},{ptr},{mail}"
-                except:
-                    a = "No A"
-                    ns = "No NS"
-                    cname = "No CNAME"
-                    mx = "No MX"
-                    spf = "No SPF"
-                    www = "No WWW"
-                    ptr = "No PTR"
-                    mail = "No Mail"
-                    y = f"{domain},{'No DNS Records'},{a},{ns}{cname},{mx},{spf},{www},{ptr},{mail}\n"
-        else:
-            y = f"{domain},{'No DNS Records'},{'no a'},{'no ns'},{'no cname'},{'no mx'},{'no spf'},{'No www'},{'No ptr'},{'No mail'}\n"
-        # print(y)
-        # z = re.sub('[^a-zA-Z0-9.,=:~ \n]+', '', y)
-        # print(z)
-        return y
+def mxToString(list):
+    join = ", "
+    str1 = ""
+    for ele in list:
+        ele1 = ele.replace(",", ":").rstrip(".")
+        str1 += ele1 + join
+    return str1
 
 
-async def get_domain_type13(session, domain):
-    ns = await get_ns(session, domain)
-    a = await get_A(session, domain)
-    cname = await get_cname(session, domain)
-    mx = await get_mx(session, domain)
-    spf = await get_spf(session, domain)
-    www, ptr = await get_www(session, domain)
-    mail = await get_mail(session, domain)
-    return f"{domain},{'Resolved 13'},{a},{ns},{cname},{mx},{spf},{www},{ptr},{mail}"
+def listToString(list):
+    join = ", "
+    str1 = ""
+    for ele in list:
+        str1 += ele + join
+    str1 = str1.rstrip(", ")
+    return str1
 
 
-async def get_ns(session, domain):
-    url = f"https://dns.google.com/resolve?name={domain}&type=NS"
-    async with session.get(url) as resp:
-        response = await resp.json(encoding="latin-1")
-        if "Answer" in response:
-            df = pd.DataFrame.from_dict(response["Answer"])
-            try:
-                ns = df["data"].loc[df["type"] == 2].values[0].rstrip(".").lower()
-            except:
-                ns = "No NS"
-        else:
-            ns = "No NS"
-    return ns
+def extract_registered_domain(mx_record):
+    reg = extract(mx_record).registered_domain
+    suffix = extract(mx_record).suffix
+    return reg, suffix
 
 
-async def get_cname(session, domain):
-    url = f"https://dns.google.com/resolve?name={domain}&type=CNAME"
-    async with session.get(url) as resp:
-        response = await resp.json(encoding="latin-1")
-        if "Answer" in response:
-            df = pd.DataFrame.from_dict(response["Answer"])
-            try:
-                cname = df["data"].loc[df["type"] == 2].values[0].rstrip(".").lower()
-            except:
-                cname = "No CNAME"
-        else:
-            cname = "No CNAME"
-    return cname
+def extract_suffix(domain):
+    result = extract(domain).suffix
+    return result
 
 
-async def get_A(session, domain):
-    url = f"https://dns.google.com/resolve?name={domain}&type=A"
-    async with session.get(url) as resp:
-        response = await resp.json(encoding="latin-1")
-        if "Answer" in response:
-            df = pd.DataFrame.from_dict(response["Answer"])
-            try:
-                a = df["data"].loc[df["type"] == 1].values[0]
-            except:
-                a = "No A"
-        else:
-            a = "No A"
+async def fetch_url(domain: str):
+    """
+    Fetch raw HTML from a URL prior to parsing.
+    :param ClientSession session: Async HTTP requests session.
+    :param str url: Target URL to be fetched.
+    :param AsyncIOFile outfile: Path of local file to write to.
+    :param int total_count: Total number of URLs to be fetched.
+    :param int i: Current iteration of URL out of total URLs.
+    """
+    extract = tldextract.TLDExtract(include_psl_private_domains=True)
+    extract.update()
+    valid_pattern = re.compile(r"[^a-zA-Z0-9.-]")
+    domain = valid_pattern.sub("", domain)
+    suffix = extract_suffix(domain)
+    a = await get_A(domain)
+    ns = await get_ns(domain)
+    cname = await get_cname(domain)
+    mx, mx_domain, mx_suffix = await get_mx(domain)
+    spf = await get_spf(domain)
+    dmarc = await get_dmarc(domain)
+    www, www_ptr, www_cname = await get_www(domain)
+    (
+        mail_a,
+        mail_mx,
+        mail_mx_domain,
+        mail_suffix,
+        mail_spf,
+        mail_dmarc,
+        mail_ptr,
+    ) = await get_mail(domain)
+    create_date = await get_create_date(domain)
+    refresh_date = date.today()
+
+    # LOGGER.info(f"Processed {batch +i+1} of {total_count} URLs.")
+
+    return [
+        domain,
+        suffix,
+        a,
+        cname,
+        ns,
+        mx,
+        mx_domain,
+        mx_suffix,
+        spf,
+        dmarc,
+        www,
+        www_ptr,
+        www_cname,
+        mail_a,
+        mail_mx,
+        mail_mx_domain,
+        mail_suffix,
+        mail_spf,
+        mail_dmarc,
+        mail_ptr,
+        create_date,
+        refresh_date,
+    ]
+
+
+async def get_A(domain):
+    try:
+        result = await resolver.resolve(domain, "A")
+        a = []
+        for rr in result:
+            a.append(rr.to_text())
+        a = listToString(a).rstrip(",")
+    except Exception as e:
+        a = "None"
     return a
 
 
-async def get_mx(session, domain):
-    url = f"https://dns.google.com/resolve?name={domain}&type=MX"
-    async with session.get(url) as resp:
-        response = await resp.json(encoding="latin-1")
-        if "Answer" in response:
-            df = pd.DataFrame.from_dict(response["Answer"])
-            try:
-                mx = df["data"].loc[df["type"] == 15].values[0].rstrip(".").lower()
-                mx = mx.split(" ")[1]
-            except:
-                mx = "No MX"
-        else:
-            mx = "No MX"
-    return mx
+async def get_ns(domain):
+    try:
+        result = await resolver.resolve(domain, "NS")
+        ns = []
+        for rr in result:
+            ns.append(rr.to_text().rstrip("."))
+        ns = listToString(ns).rstrip(",")
+    except Exception as e:
+        ns = e
+    return ns
 
 
-async def get_spf(session, domain):
-    url = f"https://dns.google.com/resolve?name={domain}&type=TXT"
-    async with session.get(url) as resp:
-        response = await resp.json(encoding="latin-1")
-        if "Answer" in response:
-            df = pd.DataFrame.from_dict(response["Answer"])
-            try:
-                spf = (
-                    df["data"]
-                    .loc[
-                        (df["type"] == 16)
-                        & (df["data"].str.contains("spf", regex=False))
-                    ]
-                    .values[0]
-                )
-            except:
-                spf = "No SPF"
-        else:
-            spf = "No SPF"
+async def get_cname(domain):
+    try:
+        answers = await resolver.resolve(domain, "CNAME")
+        cname = []
+        for cn in answers:
+            cname.append(cn.to_text().rstrip("."))
+        cname = listToString(cname).rstrip(",")
+    except dns.resolver.NoAnswer as e:
+        cname = "None"
+    except Exception as e:
+        cname = "None"
+    return cname
+
+
+async def get_mx(domain):
+    try:
+        result = await resolver.resolve(domain, "MX")
+        mx = []
+        for rr in result:
+            mx.append(f"{rr.preference}, {rr.exchange}")
+        mx = mxToString(mx).rstrip(", ")
+        split = mx.split(":")[1].strip().split(",")[0]
+        mx_domain, suffix = extract_registered_domain(split)
+    except Exception as e:
+        mx = "None"
+        mx_domain = None
+        suffix = None
+    return mx, mx_domain, suffix
+
+
+async def get_ptr(ip):
+    try:
+        ptr = socket.getfqdn(ip)
+        if ptr == ip:
+            ptr = "None"
+    except Exception as e:
+        ptr = e
+    return ptr
+
+
+async def get_www(domain):
+    www = await get_A("www." + domain)
+    if www == "No A":
+        www_ptr = "None"
+    else:
+        www_ptr = await get_ptr(www.split(", ")[0])
+    www_cname = await get_cname("www." + domain)
+
+    return www, www_ptr, www_cname
+
+
+async def get_mail(domain):
+    mail_a = await get_A("mail." + domain)
+    mail_mx, mail_mx_domain, mail_suffix = await get_mx("mail." + domain)
+    if mail_a != "No A":
+        mail_ptr = await get_ptr(mail_a.split(", ")[0])
+    else:
+        mail_ptr = "None"
+
+    mail_spf = await get_spf("mail." + domain)
+    mail_dmarc = await get_dmarc("mail." + domain)
+
+    return mail_a, mail_mx, mail_mx_domain, mail_suffix, mail_spf, mail_dmarc, mail_ptr
+
+
+async def get_spf(domain):
+    try:
+        result = await resolver.resolve(domain, "TXT")
+        spf = None
+        for rr in result:
+            if "spf" in rr.to_text().lower():
+                spf = rr.to_text().strip('"')
+        if spf is None:
+            spf = "None"
+    except Exception as e:
+        spf = "None"
     return spf
 
 
-async def get_www(session, domain):
-    url = f"https://dns.google.com/resolve?name=www.{domain}&type=A"
-    async with session.get(url) as resp:
-        response = await resp.json(encoding="latin-1")
-        if "Answer" in response:
-            df = pd.DataFrame.from_dict(response["Answer"])
-            try:
-                www = df["data"].loc[df["type"] == 1].values[0]
-                ptr = ptr_lookup(www)
-            except:
-                www = "No A"
-                ptr = "No PTR"
-        else:
-            www = "No A"
-            ptr = "No PTR"
-    return www, ptr
-
-
-async def get_mail(session, domain):
-    url = f"https://dns.google.com/resolve?name=mail.{domain}&type=A"
-    async with session.get(url) as resp:
-        response = await resp.json(encoding="latin-1")
-        if "Answer" in response:
-            df = pd.DataFrame.from_dict(response["Answer"])
-            try:
-                mail = df["data"].loc[df["type"] == 1].values[0]
-            except:
-                mail = "No Mail"
-        else:
-            mail = "No Mail"
-    return mail
-
-
-def ptr_lookup(ip):
+async def get_dmarc(domain):
     try:
-        ptr = socket.gethostbyaddr(ip)[0]
-    except:
-        ptr = "No PTR"
-    return ptr
+        result = await resolver.resolve("_dmarc." + domain, "TXT")
+        dmarc = None
+        for rr in result:
+            if "dmarc" in rr.to_text().lower():
+                dmarc = rr.to_text().strip('"')
+        if dmarc is None:
+            dmarc = "None"
+    except Exception as e:
+        dmarc = "None"
+    return dmarc
 
 
 async def get_create_date(domain):
@@ -267,8 +259,8 @@ async def get_create_date(domain):
             date = "No Date"
         else:
             date = result1["created"].strftime("%d/%m/%Y")
-    except:
-        date = "No Whois"
+    except Exception as e:
+        date = e
     return date
 
 
@@ -341,10 +333,10 @@ def park_check(soup, domain):
 
 
 async def language_check(text):
-    translator = Translator()
-    language = translator.detect(text).lang
+    trans = Translator()
+    language = trans.detect(text).lang
     if language != "en":
-        translated = translator.translate(text).text.lower()
+        translated = trans.translate(text).text.lower()
     else:
         translated = text
 
@@ -413,62 +405,70 @@ async def language_check(text):
 #
 
 
-def capture_screenshot(url, thumbnail_size=(300, 200)):
+def capture_screenshot(domain, thumbnail_size=(300, 200)):
+    driver = webdriver.Chrome()
+
+    try:
+        driver.get(f"https://www.{domain}/")
+        try:
+            elem = driver.find_element(By.XPATH, "//meta[@name='description']")
+        except:
+            elem = "No description found"
+        try:
+            screenshot = driver.get_screenshot_as_png()
+            image = Image.open(io.BytesIO(screenshot))
+        except:
+            image = Image.open("E:/rapid7/no-website.png")
+
+    except:
+        image = Image.open("E:/rapid7/no-website.png")
+
     # Set up the driver and open the URL
-    options = webdriver.ChromeOptions()
-    options.add_argument("--ignore-ssl-errors=yes")
-    options.add_argument("--ignore-certificate-errors")
-    driver = webdriver.Remote(
-        command_executor="http://localhost:4444/wd/hub", options=options
-    )
 
-    # driver = get_driver()
-    driver.get(url)
-
-    # Take a screenshot
-    screenshot = driver.get_screenshot_as_png()
-    driver.close()
-    driver.quit()
-
-    # Convert to PIL Image and create thumbnail
-    image = Image.open(io.BytesIO(screenshot))
-    image.thumbnail(thumbnail_size)
-    # image.save("thumbnail.png")
     return image
 
 
 async def main(domain):
     ssl_context = ssl.create_default_context(cafile=certifi.where())
     conn = aiohttp.TCPConnector(ssl=ssl_context)
-
     async with aiohttp.ClientSession(connector=conn, headers=headers) as session:
         try:
-            r = await session.get(f"https://dns.google/resolve?name={domain}&type=ANY")
+            r = get_ns(domain)
         except:
             r = None
             print("%s has error '%s'" % (domain, sys.exc_info()[0]))
         if r is None:
             print(domain, "does not exist")
-
         else:
-            dns = (await get_any(session, domain)).split(",")
+            dns = await fetch_url(domain)
             dnskeys = [
                 "Domain",
-                "Response",
+                "Suffix",
                 "A",
-                "NS",
                 "CNAME",
+                "NS",
                 "MX",
+                "MX_Domain",
+                "MX_Suffix",
                 "SPF",
+                "DMARC",
                 "WWW",
-                "PTR",
-                "Mail",
+                "WWW_PTR",
+                "WWW_CNAME",
+                "Mail_A",
+                "Mail_MX",
+                "Mail_MX_Domain",
+                "Mail_Suffix",
+                "Mail_SPF",
+                "Mail_DMARC",
+                "Mail_PTR",
+                "Create Date",
+                "Refresh Date",
             ]
             result = dict(zip(dnskeys, dns))
             date = await get_create_date(domain)
             datedict = {"Create Date": date}
             result.update(datedict)
-            # print(result)
             site = await parse(session, domain)
             sitedict = dict(
                 zip(
@@ -487,7 +487,6 @@ async def main(domain):
             return result
 
 
-@st.cache_data()
 def load_data(input):
     data = asyncio.run(main(input))
     return data
@@ -519,24 +518,47 @@ with st.spinner("Wait for it..."):
 st.success("Done!")
 data = load_data(input)
 df = pd.DataFrame.from_dict(data, orient="index")
-df_domain = df[df.index.isin(["Domain", "Create Date", "NS", "A", "CNAME"])]
-df_email = df[df.index.isin(["MX", "SPF", "Mail"])]
-df_website = df[df.index.isin(["WWW", "PTR", "Parked"])]
+df_domain = df[df.index.isin(["Domain", "Suffix", "Create Date", "NS", "A", "CNAME"])]
+df_email = df[df.index.isin(["Domain", "MX", "MX_Domain", "MX_Suffix", "SPF", "DMARC"])]
+df_mail = df[
+    df.index.isin(
+        [
+            "Domain",
+            "Mail_A",
+            "Mail_MX",
+            "Mail_MX_Domain",
+            "Mail_Suffix",
+            "Mail_SPF",
+            "Mail_DMARC",
+            "Mail_PTR",
+        ]
+    )
+]
+df_mail.at["Domain", 0] = "mail." + input
+df_website = df[df.index.isin(["Domain", "WWW", "WWW_PTR", "WWW_CNAME", "Parked"])]
+df_website.at["Domain", 0] = "www." + input
 df_description = df[df.index.isin(["Title", "Description", "Category", "Language"])]
 df_domain_style = style_df(df_domain)
 df_email_style = style_df(df_email)
+df_mail_style = style_df(df_mail)
 df_website_style = style_df(df_website)
 df_description_style = style_df(df_description)
+df_translation_style = style_df(
+    df[df.index.isin(["Title", "Description", "Category", "Language", "Translation"])]
+)
 
 
-image = www_image(url)
-col1, col2 = st.columns(2)
+image = www_image(input)
+col1, col2, col3 = st.columns(3)
 with col1:
     st.subheader("Domain Info")
     st.write(df_domain_style.to_html(), unsafe_allow_html=True)
 with col2:
     st.subheader("Email Info")
     st.write(df_email_style.to_html(), unsafe_allow_html=True)
+with col3:
+    st.subheader("Mail Info")
+    st.write(df_mail_style.to_html(), unsafe_allow_html=True)
 with st.container():
     st.subheader("Website Info")
     (
@@ -547,8 +569,10 @@ with st.container():
         st.write(df_website_style.to_html(), unsafe_allow_html=True)
     with col2:
         st.image(image, caption="Website Screenshot")
-        st.markdown(f'<a href="{url}">Website Link</a>', unsafe_allow_html=True)
-    st.write(df_description_style.to_html(), unsafe_allow_html=True)
+        st.markdown(f'{url} <a href="{url}">Click to open</a>', unsafe_allow_html=True)
+
     if data["Language"] != "en":
         st.write("Translated Text")
-        st.write(df["Translation"])
+        st.write(df_translation_style.to_html(), unsafe_allow_html=True)
+    else:
+        st.write(df_description_style.to_html(), unsafe_allow_html=True)
