@@ -12,7 +12,7 @@ import ssl
 import sys
 import time
 import tldextract
-
+import urllib.robotparser
 import datetime
 from bs4 import BeautifulSoup
 from datetime import datetime, date
@@ -66,6 +66,17 @@ def extract_registered_domain(mx_record):
 def extract_suffix(domain):
     result = extract(domain).suffix
     return result
+
+    def check_robots_txt(domain: str):
+        """
+        Check if the site's robots.txt allows collecting the home page HTML.
+        :param str domain: Domain of the site.
+        :return: True if allowed, False otherwise.
+        """
+        rp = urllib.robotparser.RobotFileParser()
+        rp.set_url(f"https://{domain}/robots.txt")
+        rp.read()
+        return rp.can_fetch("*", f"https://{domain}/")
 
 
 async def fetch_url(domain: str):
